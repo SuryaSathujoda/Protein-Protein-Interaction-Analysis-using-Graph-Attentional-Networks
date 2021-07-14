@@ -47,7 +47,7 @@ def train(model, loader_tr, loader_val):
     best_f1_loss = 0
     best_model = model
 
-    for epoch in range(1):
+    for epoch in range(500):
         model.train()
         for batch in loader_tr:
             optimizer.zero_grad()
