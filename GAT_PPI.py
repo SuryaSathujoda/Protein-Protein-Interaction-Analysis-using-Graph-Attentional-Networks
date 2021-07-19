@@ -10,8 +10,8 @@ from torch.utils.tensorboard import SummaryWriter
 from torch_geometric.datasets import PPI
 from torch_geometric.nn import GATConv
 from torch_geometric.data import DataLoader
+from torchmetrics import F1
 
-from sklearn.metrics import f1_score
 
 class GAT(nn.Module):
     def __init__(self, input_dim):
@@ -41,7 +41,7 @@ class GAT(nn.Module):
 def train(model, loader_tr, loader_val):
     optimizer = optim.Adam(model.parameters(), lr=0.005)
 
-    patience = 20
+    patience = 100
     epochs_no_improve = 0
     best_f1 = 0
     best_f1_loss = 0
@@ -50,6 +50,7 @@ def train(model, loader_tr, loader_val):
     for epoch in range(500):
         model.train()
         for batch in loader_tr:
+            batch = batch.to(device)
             optimizer.zero_grad()
             pred = model(batch)
             loss = model.loss(pred, batch.y)
@@ -60,11 +61,11 @@ def train(model, loader_tr, loader_val):
         running_f1 = 0
         model.eval()
         for batch in loader_val:
+            batch = batch.to(device)
             pred = model(batch)
             loss = model.loss(pred, batch.y)
-            xs = (pred.detach().numpy() > 0.5)
-            ys = batch.y.detach().numpy()
-            micro_f1 = f1_score(ys, xs, average='micro')
+            f1 = F1().to(device)
+            micro_f1 = f1(pred, batch.y.type(torch.int))
             running_f1 += micro_f1
             writer.add_scalar('F1/val', micro_f1, epoch)
 
@@ -90,13 +91,13 @@ def train(model, loader_tr, loader_val):
 
 def test(model, data_t):
     running_f1 = 0
+    model.eval()
     for batch in loader_t:
-        model.eval()
+        batch = batch.to(device)
         pred = model(batch)
         loss = model.loss(pred, batch.y)
-        xs = (pred.detach().numpy() > 0.5)
-        ys = batch.y.detach().numpy()
-        micro_f1 = f1_score(ys, xs, average='micro')
+        f1 = F1().to(device)
+        micro_f1 = f1(pred, batch.y.type(torch.int))
         running_f1 += micro_f1
         writer.add_scalar('F1/test', micro_f1)
         
@@ -104,6 +105,7 @@ def test(model, data_t):
     print('Test Micro F1: {:,.4f}'.format(running_f1))
 
 writer = SummaryWriter()
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 network = 'PPI'
 
@@ -120,6 +122,7 @@ loader_t = DataLoader(dataset_t, batch_size=2, shuffle=False)
 
 num_labels = 121
 model = GAT(data_tr.num_features)
+model.to(device)
 print('***** '+str(model)+' *****')
 
 tmp_str = 'Num of Nodes: {}, Num of Features: {}, Num of Edges: {}, Num of Labels: {}'
